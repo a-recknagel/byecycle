@@ -10,7 +10,7 @@ from typing import (
     cast,
 )
 
-from typer import Option, Exit
+from typer import Exit, Option
 
 from byecycle import __version__
 
