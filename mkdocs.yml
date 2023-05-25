@@ -1,0 +1,79 @@
+site_name: byecycle documentation
+repo_url: https://github.com/a-recknagel/byecycle
+site_url: https://a-recknagel.github.io/byecycle
+
+theme:
+  name: material
+  logo: data/logo.png
+  favicon: data/favicon.png
+  palette:
+    - scheme: default
+      primary: light-blue
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: light-blue
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+  features:
+    - navigation.footer
+    - navigation.indexes
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - toc.follow
+    - content.code.copy
+
+nav:
+  - Home: 'index.md'
+  - Code Reference:
+    - Public API: 'autodocs/byecycle.md'
+    - Graph Generation: 'autodocs/graph.md'
+    - Types and Stuff: 'autodocs/misc.md'
+    - Drawings: 'autodocs/draw.md'
+  - Community:
+      - Code of Conduct: 'coc.md'
+
+watch:
+  - src
+  - docs
+  - README.md
+  - .github/CODE_OF_CONDUCT.md
+
+plugins:
+  - search
+  - section-index
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_root_toc_entry: false
+            show_category_heading: true
+            docstring_section_style: list
+            members_order: source
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - def_list
+  - admonition
+  - footnotes
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+
+extra_css:
+  - css/style.css
