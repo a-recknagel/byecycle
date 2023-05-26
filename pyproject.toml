@@ -1,6 +1,6 @@
 [project]
 name = "byecycle"
-version = "0.1.1"
+version = "0.1.2"
 description = "Find and expose cyclic imports in python projects."
 requires-python = ">=3.11"
 readme = "README.md"
@@ -60,6 +60,17 @@ warn_return_any = true
 warn_unused_ignores = true
 check_untyped_defs = true
 enable_incomplete_feature=["Unpack"]
+
+[tool.coverage.run]
+branch = true
+data_file = ".coverage/coverage_report"
+source = ["byecycle"]
+
+[tool.coverage.paths]
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
 
 [tool.black]
 line-length = 90

@@ -1,20 +1,34 @@
 # byecycle 🚲
 
+[![python](https://img.shields.io/pypi/pyversions/byecycle)](https://pdm.fming.dev)
+[![pyPI](https://img.shields.io/pypi/v/byecycle)](https://pypi.org/project/byecycle)
+[![docs](https://img.shields.io/badge/doc-pages-blue)](https://a-recknagel.github.io/byecycle/)
+[![pdm-managed](https://img.shields.io/badge/packaging-pdm-blueviolet)](https://pdm.fming.dev)
+[![license](https://img.shields.io/pypi/l/byecycle)](https://github.com/a-recknagel/byecycle/blob/main/LICENSE)
+[![chat](https://img.shields.io/badge/chat-gitter-mediumturquoise)](https://matrix.to/#/#chextra:gitter.im)
+
 Find and expose cyclic imports in python projects.
 
 ## Installation
 
-### From pyPI
+`byecycle` uses the build-in [ast module](https://docs.python.org/3/library/ast.html#ast.parse)
+to parse code files. As a consequence, it can only handle python code within the same
+major version (read: no support for python 1 and 2), and the same or lower minor version 
+of the python interpreter it was installed with. If `byecycle` raises `SyntaxErrors` in 
+code that you know to be working, try using a `byecycle` that is installed with the same 
+python version that can run the code in question.
 
+### From pyPI
+#### Requirements: 
  - python 3.11 or higher
+ - [pipx](https://pypa.github.io/pipx/installation/)
 ```shell
-# `pipx` might be a better choice, given that it's a global dev-tool
-pip install byecycle
+pipx install byecycle
 ```
 ---
 
 ### From Source / Dev Setup
-
+#### Requirements:
  - python 3.11 or higher
  - [pdm](https://pdm.fming.dev/)
  - git
@@ -31,10 +45,10 @@ pdm install
 ```shell
 # with a path
 byecycle /home/me/dev/byecycle/src/byecycle/
-# or an installed package
+# or the name of an installed package
 byecycle byecycle
 ```
-The result will be a well-formed json string:
+The result will be a json string:
 
 ```json
 {
@@ -151,7 +165,8 @@ byecycle byecycle | jq '.[] |= (.[] |= select(.cycle != null) | select(. != {}))
 }
 ```
 Alternatively, you can also call the main entrypoint's core functionality as a regular
-python function which will return the result as a dictionary:
+python function. Among other things, it returns a dictionary equivalent to the CLI's json
+that you can work with:
 
 ```python
 from byecycle import run
@@ -169,13 +184,26 @@ byecycle -> byecycle.graph -> complicated
 byecycle -> byecycle.cli -> complicated
 ```
 
+---
+
+See the help text of `byecycle` for an explanation of tags/`ImportKind`s and 
+cycle/`EdgeKind`s. 
+
+In short, if there is a cycle, the tags of all involved imports inform
+the cycle-severity, with the highest severity winning out if multiple apply. The defaults
+can be overriden in order to isolate, filter, or highlight cycles with specific 
+tags/severities.
+
 ### To Visualize the Import Graph
 
-If you pass the `--draw` flag on your command-line-call, byecycle will create an image of
+If you pass the `--draw` flag<sup>1</sup> on your command-line-call, `byecycle` will create an image of
 the import graph instead:
 
 ```shell
 byecycle byecycle --draw
 ```
-<img src="docs/data/byecycle.png" alt="" width="320" height="240">
-<img src="docs/data/byecycle_legend.png" alt="" width="320" height="240">
+<img src="https://github.com/a-recknagel/byecycle/assets/2063412/e5e8427c-8554-4ce5-9f9f-e2e9eca40742" alt="Plot of imports in the byecycle project" width="320" height="240">
+<img src="https://github.com/a-recknagel/byecycle/assets/2063412/a00586db-e71e-4e74-94ed-0709129920b0" alt="Legend for nodes in the plot" width="320" height="240">
+
+---
+<sup>[1]<sub> Requires installation of the `draw`-extra, i.e. `pipx install "byecycle[draw]"`.</sub></sup>

@@ -18,7 +18,14 @@ DEFAULT_COLORS = {
 
 
 def draw_graph(package: str, g: nx.DiGraph, draw_only_cycles: bool) -> tuple[Path, Path]:
-    """Use matplotlib to draw the import graph."""
+    """Use matplotlib to draw the import graph.
+
+    This function also writes the drawn pictures to disk.
+
+    Returns:
+        The file location of the graph image.
+        The file location of the legend of the nodes from the graph image.
+    """
     graph_path = Path(f"{package}.png")
     legend_path = Path(f"{package}_legend.png")
 
@@ -68,12 +75,12 @@ def draw_graph(package: str, g: nx.DiGraph, draw_only_cycles: bool) -> tuple[Pat
             (e_0, e_1) for e_0, e_1 in g.edges if g[e_0][e_1]["cycle"] == "complicated"
         ],
     )
-    plt.title(f"Import graph for {package}")
-    plt.savefig(str(graph_path))
+    plt.axis("off")
+    plt.tight_layout()
+    plt.savefig(graph_path)
     plt.show()
 
     # store legend
-    plt.axis("off")
     plt.legend(
         loc="upper center",
         ncol=2,
@@ -81,6 +88,8 @@ def draw_graph(package: str, g: nx.DiGraph, draw_only_cycles: bool) -> tuple[Pat
         shadow=True,
         handles=[ptc.Patch(color=c, label=l) for l, c in colors.items()],
     )
-    plt.savefig(legend_path)
+    plt.axis("off")
+    plt.tight_layout()
+    plt.savefig(legend_path, transparent=True)
 
     return graph_path, legend_path

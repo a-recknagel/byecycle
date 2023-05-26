@@ -4,6 +4,7 @@
 .venv
 pdm.lock
 src/**/*.png
+*.png
 
 # tool artifacts
 .mypy_cache

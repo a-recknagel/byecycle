@@ -1,9 +1,9 @@
 import enum
 from typing import (
     Annotated,
+    Iterable,
     Literal,
     Optional,
-    Sequence,
     TypeAlias,
     TypedDict,
     Unpack,
@@ -14,20 +14,35 @@ from typer import Exit, Option
 
 from byecycle import __version__
 
-EdgeKind: TypeAlias = Literal["good", "bad", "complicated", "skip"]
 ImportKind: TypeAlias = Literal["dynamic", "conditional", "typing", "parent", "vanilla"]
+"""The types/kinds of imports that are currently recognized."""
+EdgeKind: TypeAlias = Literal["good", "bad", "complicated", "skip"]
+"""Describes an import cycle, helping with evaluating how much of an issue it could be."""
 edge_order: dict[EdgeKind, int] = {"bad": 0, "complicated": 1, "good": 2, "skip": 3}
 
 
 class ImportMetaData(TypedDict):
+    """Metadata to interpret import cycle severity."""
+
     tags: list[ImportKind]
     cycle: EdgeKind | None
 
 
 GraphDict: TypeAlias = dict[str, dict[str, ImportMetaData]]
+"""Dictionary representation of an import graph.
+
+The keys on the first level are the qualnames of importing modules, the keys on the second 
+level are the qualnames of imported modules, and the values on the second level contain
+the metadata dictionary of their keyed imports ([`ImportMetaData`][byecycle.misc.ImportMetaData]).
+Metadata consists of a `tags`-list of [`ImportKind`][byecycle.misc.ImportKind]s and a
+`cycle` which is either an [`EdgeKind`][byecycle.misc.EdgeKind] if there is a cycle, or
+`None` if there isn't.
+"""
 
 
 class SeverityMap(TypedDict, total=False):
+    """Mapping of [`ImportKind`][byecycle.misc.ImportKind]s to [`EdgeKind`][byecycle.misc.ImportKind]s."""
+
     dynamic: EdgeKind
     conditional: EdgeKind
     typing: EdgeKind
@@ -35,11 +50,11 @@ class SeverityMap(TypedDict, total=False):
     vanilla: EdgeKind
 
 
-class Edge(str, enum.Enum):
-    """Proxy of the EdgeKind type alias.
+class _Edge(str, enum.Enum):
+    """Proxy of the [`EdgeKind`][byecycle.misc.ImportKind] type alias.
 
     Necessary for typer due to https://github.com.tiangolo/typer/issues/76. I really hate
-    it.
+    it, also makes mypy sad.
     """
 
     good: EdgeKind = "good"
@@ -68,11 +83,11 @@ help_texts = {
 }
 rich_annotation: TypeAlias = Annotated[bool, Option(help=help_texts["rich_annotation"])]
 draw_annotation: TypeAlias = Annotated[bool, Option(help=help_texts["draw_annotation"])]
-dynamic_annotation: TypeAlias = Annotated[Edge, Option(help=help_texts["dynamic_annotation"])]
-conditional_annotation: TypeAlias = Annotated[Edge, Option(help=help_texts["conditional_annotation"])]
-typing_annotation: TypeAlias = Annotated[Edge, Option(help=help_texts["typing_annotation"])]
-parent_annotation: TypeAlias = Annotated[Edge, Option(help=help_texts["parent_annotation"])]
-vanilla_annotation: TypeAlias = Annotated[Edge, Option(help=help_texts["vanilla_annotation"])]
+dynamic_annotation: TypeAlias = Annotated[_Edge, Option(help=help_texts["dynamic_annotation"])]
+conditional_annotation: TypeAlias = Annotated[_Edge, Option(help=help_texts["conditional_annotation"])]
+typing_annotation: TypeAlias = Annotated[_Edge, Option(help=help_texts["typing_annotation"])]
+parent_annotation: TypeAlias = Annotated[_Edge, Option(help=help_texts["parent_annotation"])]
+vanilla_annotation: TypeAlias = Annotated[_Edge, Option(help=help_texts["vanilla_annotation"])]
 draw_only_cycles_annotation: TypeAlias = Annotated[Optional[bool], Option("--draw-only-cycles", help=help_texts["draw_only_cycles_annotation"])]
 version_annotation: TypeAlias = Annotated[Optional[bool], Option("--version", callback=_print_version, is_eager=True, help=help_texts["version_annotation"])]
 # fmt: on
@@ -87,11 +102,22 @@ _default_cycle_severity: SeverityMap = {
 
 
 def cycle_severity(
-    cycles: Sequence[ImportKind] | set[ImportKind], **kwargs: Unpack[SeverityMap]
-) -> EdgeKind | None:
-    """"""
+    cycles: Iterable[ImportKind], **kwargs: Unpack[SeverityMap]
+) -> EdgeKind:
+    """Interpret import tags as to their severity if the import was part of a cycle.
+
+    Args:
+        cycles: The iterable of import-kind tags, at least one entry is expected.
+        **kwargs: Valid values are keywords equating to [`ImportKind`][byecycle.misc.ImportKind]s
+            mapping to [`EdgeKind`][byecycle.misc.ImportKind]s in order to override that
+            [`ImportKind`][byecycle.misc.ImportKind]'s severity-interpretation.
+
+    Returns:
+        A string denoting the severity of the cycle.
+    """
+    cycles = [*cycles]
     if not cycles:
-        return None  # shouldn't happen, every import has at least one ImportKind
+        raise RuntimeError("Every import statement needs at least one kind-identifier.")
     severity_map = cast(SeverityMap, {**_default_cycle_severity, **kwargs})
     cycles = [c for c in cycles if c != "vanilla"]
     if not cycles:
@@ -103,12 +129,20 @@ def cycle_severity(
 def path_to_module_name(path: str, base: str, name: str) -> str:
     """Turns a file path into a valid module name.
 
+    Just an educated guess on my part, I couldn't find an official reference. Chances are
+    that you can't know the real name of a package unless you actually install it, and
+    only projects that adhere to best practices and/or common sense regarding naming and
+    structure can be handled correctly by this function.
+
     Args:
         path: Absolute path to the file in question.
         base: Absolute path to the "source root".
         name: Name of the distribution.
 
-    Examples:
+    Returns:
+        A string in the form of an importable python module.
+
+    Example:
         ```py
         >>> # Sample call #1:
         >>> path_to_module_name(

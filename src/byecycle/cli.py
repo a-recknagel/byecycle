@@ -7,10 +7,11 @@ import networkx as nx  # type: ignore
 import typer
 from rich import print, print_json
 
-from byecycle.graph import build_digraph, import_map
-from byecycle.misc import Edge, EdgeKind, GraphDict
+from byecycle.graph import Module, build_digraph
+from byecycle.misc import EdgeKind, GraphDict
 from byecycle.misc import _default_cycle_severity as severity
 from byecycle.misc import (
+    _Edge,
     conditional_annotation,
     draw_annotation,
     draw_only_cycles_annotation,
@@ -80,12 +81,18 @@ def _run(
     """Programmatic equivalent to running this package through the CLI.
 
     Args:
-        project: Either the path to a project source, or the name of an installed package
+        project: Either the path to a project source, or the name of an installed package.
+        dynamic: Severity of dynamic import cycles.
+        conditional: Severity of conditional import cycles.
+        typing: Severity of typing-only import cycles.
+        parent: Severity of parent-package-resolution related import cycles.
+        vanilla: Severity of vanilla import cycles.
+
 
     Returns:
-        A dictionary representation of the import graph
-        The actual import graph
-        The name of the package
+        A dictionary-representation of the import graph.
+        The actual import graph.
+        The name of the package.
     """
     if os.path.isdir(project):
         project_path = Path(project)
@@ -98,9 +105,9 @@ def _run(
             )
         project_path = Path(loc).parent.resolve()
 
-    modules = import_map(str(project_path))
+    Module.populate(project_path)
     graph = build_digraph(
-        modules,
+        [*Module.modules()],
         dynamic=dynamic,
         conditional=conditional,
         typing=typing,
