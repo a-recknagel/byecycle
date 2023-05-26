@@ -116,20 +116,20 @@ class ImportVisitor(ast.NodeVisitor):
 
     @classmethod
     def find_import_kind(cls, node: ast.Import | ast.ImportFrom) -> ImportKind:
-        parent: ast.AST = node._parent
+        parent: ast.AST = node._parent  # type: ignore[union-attr]
         match parent:
             case ast.If(
-                _parent=ast.Module,
+                _parent=ast.Module,  # type: ignore[misc]
                 test=(ast.Name(id="TYPE_CHECKING") | ast.Attribute(attr="TYPE_CHECKING")),
             ):
                 # guarded by `if typing.TYPE_CHECKING:`
                 return "typing"
-            case ast.If(_parent=ast.Module):
+            case ast.If(_parent=ast.Module):  # type: ignore[misc]
                 # probably guarded by `if sys.version >= (x, y, z):`, but doesn't actually
                 # matter -- anything but TYPE_CHECKING is env-dependent during runtime or
                 # too obtuse to consider (I'm not writing code that checks for `if True:`)
                 return "conditional"
-            case ast.AST(_parent=current):
+            case ast.AST(_parent=current):  # type: ignore[misc]
                 while True:
                     # test if the import happens somewhere in a function
                     if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -153,12 +153,12 @@ class ImportVisitor(ast.NodeVisitor):
         kind = self.find_import_kind(node)
         # handle relative imports
         if node.level:
-            path = node._module[: -node.level]
+            path = node._module[: -node.level]  # type: ignore[attr-defined]
             if node.module:
                 path.append(node.module)
             module = ".".join(path)
         else:
-            assert node.module is not None  # iff None when node.level > 0
+            assert node.module is not None  # iff None when node.level > 0 # nosec
             module = node.module
 
         for alias in node.names:
@@ -190,8 +190,8 @@ def import_map(package: str) -> list[Module]:
         # and a link to their assumed module path to resolve imports
         for node in ast.walk(ast_):
             for child in ast.iter_child_nodes(node):
-                child._parent = node
-                child._module = (
+                child._parent = node  # type: ignore[attr-defined]
+                child._module = (  # type: ignore[attr-defined]
                     name.split(".") + ["."]
                     if path.name == "__init__.py"
                     else name.split(".")

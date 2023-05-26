@@ -28,11 +28,11 @@ cli = typer.Typer(rich_markup_mode="rich")
 @cli.command(no_args_is_help=True)
 def run(
     project: str,
-    dynamic: dynamic_annotation = severity["dynamic"],
-    conditional: conditional_annotation = severity["conditional"],
-    typing: typing_annotation = severity["typing"],
-    parent: parent_annotation = severity["parent"],
-    vanilla: vanilla_annotation = severity["vanilla"],
+    dynamic: dynamic_annotation = severity["dynamic"],  # type: ignore[assignment]
+    conditional: conditional_annotation = severity["conditional"],  # type: ignore[assignment]
+    typing: typing_annotation = severity["typing"],  # type: ignore[assignment]
+    parent: parent_annotation = severity["parent"],  # type: ignore[assignment]
+    vanilla: vanilla_annotation = severity["vanilla"],  # type: ignore[assignment]
     rich: rich_annotation = True,
     draw: draw_annotation = False,
     draw_only_cycles: draw_only_cycles_annotation = None,
@@ -47,11 +47,11 @@ def run(
     """
     data, graph, name = _run(
         project,
-        dynamic=dynamic,
-        conditional=conditional,
-        typing=typing,
-        parent=parent,
-        vanilla=vanilla,
+        dynamic=dynamic,  # type: ignore[arg-type]
+        conditional=conditional,  # type: ignore[arg-type]
+        typing=typing,  # type: ignore[arg-type]
+        parent=parent,  # type: ignore[arg-type]
+        vanilla=vanilla,  # type: ignore[arg-type]
     )
     if draw:
         from byecycle.draw import draw_graph
