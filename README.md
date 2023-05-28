@@ -206,4 +206,4 @@ byecycle byecycle --draw
 <img src="https://github.com/a-recknagel/byecycle/assets/2063412/a00586db-e71e-4e74-94ed-0709129920b0" alt="Legend for nodes in the plot" width="320" height="240">
 
 ---
-<sup>[1]<sub> Requires installation of the `draw`-extra, i.e. `pipx install "byecycle[draw]"`.</sub></sup>
+<sup>[1]</sup><sub> Requires installation of the `draw`-extra, i.e. `pipx install "byecycle[draw]"`.</sub>
