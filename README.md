@@ -11,15 +11,15 @@ Find and expose cyclic imports in python projects.
 
 ## Installation
 
-`byecycle` uses the build-in [ast module](https://docs.python.org/3/library/ast.html#ast.parse)
+`byecycle` uses the built-in [ast module](https://docs.python.org/3/library/ast.html#ast.parse)
 to parse code files. As a consequence, it can only handle python code within the same
-major version (read: no support for python 1 and 2), and the same or lower minor version 
-of the python interpreter it was installed with. If `byecycle` raises `SyntaxErrors` in 
-code that you know to be working, try using a `byecycle` that is installed with the same 
+major version (read: no support for python 1 and 2), and the same or lower minor version
+of the python interpreter it was installed with. If `byecycle` raises `SyntaxError`s in
+code that you know to be working, try using a `byecycle` that is installed with the same
 python version that can run the code in question.
 
-### From pyPI
-#### Requirements: 
+### From PyPI
+#### Requirements:
  - python 3.11 or higher
  - [pipx](https://pypa.github.io/pipx/installation/)
 ```shell
@@ -118,8 +118,8 @@ If you need the output to be plain ascii, pass the `--no-rich` flag.
 
 ---
 
-For bigger projects, you might get much more complex output. The intent of returning 
-`json` is to have something that can be easily piped into e.g. `jquery` for further 
+For bigger projects, you might get much more complex output. The intent of returning
+`json` is to have something that can be easily piped into e.g. `jq` for further
 processing:
 
 ```shell
@@ -186,12 +186,12 @@ byecycle -> byecycle.cli -> complicated
 
 ---
 
-See the help text of `byecycle` for an explanation of tags/`ImportKind`s and 
-cycle/`EdgeKind`s. 
+See the help text of `byecycle` for an explanation of tags/`ImportKind`s and
+cycle/`EdgeKind`s.
 
 In short, if there is a cycle, the tags of all involved imports inform
 the cycle-severity, with the highest severity winning out if multiple apply. The defaults
-can be overriden in order to isolate, filter, or highlight cycles with specific 
+can be overriden in order to isolate, filter, or highlight cycles with specific
 tags/severities.
 
 ### To Visualize the Import Graph
@@ -206,4 +206,4 @@ byecycle byecycle --draw
 <img src="https://github.com/a-recknagel/byecycle/assets/2063412/a00586db-e71e-4e74-94ed-0709129920b0" alt="Legend for nodes in the plot" width="320" height="240">
 
 ---
-<sup>[1]<sub> Requires installation of the `draw`-extra, i.e. `pipx install "byecycle[draw]"`.</sub></sup>
+<sup>[1]</sup><sub> Requires installation of the `draw`-extra, i.e. `pipx install "byecycle[draw]"`.</sub>
