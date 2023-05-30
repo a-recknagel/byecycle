@@ -162,7 +162,7 @@ def cycle_severity(
     Returns:
         A string denoting the severity of the cycle.
     """
-    tags: set[ImportKind] = tags_b | tags_b
+    tags: set[ImportKind] = tags_a | tags_b
     if "vanilla" in tags and ("vanilla" not in tags_a or "vanilla" not in tags_b):
         tags.remove("vanilla")
     severity_map = cast(SeverityMap, {**_default_cycle_severity, **kwargs})
