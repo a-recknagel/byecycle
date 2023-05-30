@@ -151,11 +151,16 @@ class Module:
         Once this method was executed, the [`Module.modules`][byecycle.graph.Module.modules]
         class-method can called to produce all created modules.
 
+        Note:
+            Since `populate` takes place at the class-level, calling this funtion multiple
+            times will clear the data from a previous call.
+
         Args:
             source_path: Location of the source tree of the package that should be walked.
                 The `.name` attribute of this parameter is assumed to be the name of the
                 package in order to identify which imports are local imports.
         """
+        cls._modules = []
         node_data: dict[Module, list[tuple[str, ImportKind]]] = {}
         package_name = source_path.name
 
@@ -268,7 +273,8 @@ def build_digraph(modules: list[Module], **kwargs: Unpack[SeverityMap]) -> nx.Di
     """Turns a module-imports-mapping into a smart graph object.
 
     Args:
-        modules: [`Module`][byecycle.graph.Module] objects that know what other local modules they import, and how.
+        modules: [`Module`][byecycle.graph.Module] objects that know what other local
+            modules they import, and how.
         **kwargs: Override the default settings for the severity of the "how" when imports
             in local modules might cause import cycles.
 
@@ -285,8 +291,9 @@ def build_digraph(modules: list[Module], **kwargs: Unpack[SeverityMap]) -> nx.Di
             g.add_edge(module.name, import_.name, tags=tags)
     for e_0, e_1 in g.edges():
         if g.has_edge(e_1, e_0):
-            g[e_0][e_1]["tags"] = g[e_0][e_1]["tags"] | g[e_1][e_0]["tags"]
-            g[e_0][e_1]["cycle"] = cycle_severity(g[e_0][e_1]["tags"], **kwargs)
+            g[e_0][e_1]["cycle"] = cycle_severity(
+                g[e_0][e_1]["tags"], g[e_1][e_0]["tags"], **kwargs
+            )
         else:
             g[e_0][e_1]["cycle"] = None
     for e_0, e_1 in g.edges():

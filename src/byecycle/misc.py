@@ -37,6 +37,48 @@ the metadata dictionary of their keyed imports ([`ImportMetaData`][byecycle.misc
 Metadata consists of a `tags`-list of [`ImportKind`][byecycle.misc.ImportKind]s and a
 `cycle` which is either an [`EdgeKind`][byecycle.misc.EdgeKind] if there is a cycle, or
 `None` if there isn't.
+
+Example:
+    ```py
+    {
+        "foo": {
+            "foo.a": {
+                "tags": ["vanilla"],
+                "cycle": "complicated"
+            }
+        }
+        "foo.a": {
+            "foo": {
+                "tags": ["parent", "vanilla"],
+                "cycle": "complicated"
+            },
+            "foo.c": {
+                "tags": ["vanilla"],
+                "cycle": None
+            }
+        }
+        "foo.b": {
+            "foo": {
+                "tags": ["parent"],
+                "cycle": "complicated"
+            },
+            "foo.c": {
+                "tags": ["typing"],
+                "cycle": "skip"
+            }
+        }
+        "foo.c": {
+            "foo": {
+                "tags": ["parent"],
+                "cycle": None
+            },
+            "foo.b": {
+                "tags": ["vanilla"],
+                "cycle": "skip"
+            }
+        }
+    }
+    ```
 """
 
 
@@ -102,12 +144,17 @@ _default_cycle_severity: SeverityMap = {
 
 
 def cycle_severity(
-    cycles: Iterable[ImportKind], **kwargs: Unpack[SeverityMap]
+    tags_a: set[ImportKind], tags_b: set[ImportKind], **kwargs: Unpack[SeverityMap]
 ) -> EdgeKind:
-    """Interpret import tags as to their severity if the import was part of a cycle.
+    """Interpret the severity of an import cycle given their tags.
+
+    In general, all tags get thrown in the same bag and the one with the highest mapped
+    severity "wins". Except for the "vanilla" tag, which will only have its severity
+    considered if both imports had "vanilla" in their tag list.
 
     Args:
-        cycles: The iterable of import-kind tags, at least one entry is expected.
+        tags_a: The set of import-kind tags for the first import statement.
+        tags_b: The set of import-kind tags for the second import statement.
         **kwargs: Valid values are keywords equating to [`ImportKind`][byecycle.misc.ImportKind]s
             mapping to [`EdgeKind`][byecycle.misc.ImportKind]s in order to override that
             [`ImportKind`][byecycle.misc.ImportKind]'s severity-interpretation.
@@ -115,14 +162,11 @@ def cycle_severity(
     Returns:
         A string denoting the severity of the cycle.
     """
-    cycles = [*cycles]
-    if not cycles:
-        raise RuntimeError("Every import statement needs at least one kind-identifier.")
+    tags: set[ImportKind] = tags_a | tags_b
+    if "vanilla" in tags and ("vanilla" not in tags_a or "vanilla" not in tags_b):
+        tags.remove("vanilla")
     severity_map = cast(SeverityMap, {**_default_cycle_severity, **kwargs})
-    cycles = [c for c in cycles if c != "vanilla"]
-    if not cycles:
-        return severity_map["vanilla"]
-    severity = sorted((severity_map[c] for c in cycles), key=edge_order.get)  # type: ignore
+    severity = sorted((severity_map[t] for t in tags), key=edge_order.get)  # type: ignore[arg-type]
     return severity[0]
 
 

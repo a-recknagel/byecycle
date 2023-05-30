@@ -35,7 +35,7 @@ pipx install byecycle
 ```shell
 git clone https://github.com/a-recknagel/byecycle.git
 cd byecycle
-pdm install
+pdm install -G:all
 ```
 
 ## Usage
