@@ -1,6 +1,6 @@
 import sys
 
-from byecycle.cli import cli
+from byecycle import cli
 
 if __name__ == "__main__":
-    cli()
+    cli.cli()

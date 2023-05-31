@@ -1,4 +1,4 @@
-import importlib
+import importlib.util
 import json
 import os.path
 from pathlib import Path
@@ -78,7 +78,7 @@ def _run(
     parent: EdgeKind = severity["parent"],
     vanilla: EdgeKind = severity["vanilla"],
 ) -> tuple[GraphDict, nx.DiGraph, str]:
-    """Programmatic equivalent to running this package through the CLI.
+    """Programmatic equivalent of running this package through the CLI.
 
     Args:
         project: Either the path to a project source, or the name of an installed package.
@@ -88,7 +88,6 @@ def _run(
         parent: Severity of parent-package-resolution related import cycles.
         vanilla: Severity of vanilla import cycles.
 
-
     Returns:
         A dictionary-representation of the import graph.
         The actual import graph.
@@ -97,13 +96,13 @@ def _run(
     if os.path.isdir(project):
         project_path = Path(project)
     else:
-        loc = importlib.import_module(project).__file__
-        if loc is None:
+        spec = importlib.util.find_spec(project)
+        if spec is None or spec.origin is None:
             raise RuntimeError(
-                f"Failed trying to resolve {project=} as a package, please pass source "
-                f"code location as proper path."
+                f"Failed trying to resolve {project=} as a package, please pass the "
+                f"source code location as proper path."
             )
-        project_path = Path(loc).parent.resolve()
+        project_path = Path(spec.origin).parent.resolve()
 
     Module.populate(project_path)
     graph = build_digraph(

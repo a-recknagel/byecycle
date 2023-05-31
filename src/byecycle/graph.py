@@ -63,24 +63,36 @@ class Module:
             else:
                 # when calling this function, filter with `startswith(package)` to avoid
                 # this exception
-                raise RuntimeError
+                raise RuntimeError(f"Tried to add non-local import {other=}.")
         else:
             # bad parameter type
-            raise RuntimeError
+            raise RuntimeError(f"Tried to use invalid type {type(other)} as module.")
 
         self.imports[target].add(tag)
 
     def __hash__(self):
+        """Setting the hash of a module to be equal to its name's hash.
+
+        That way, module objects can be found in hash maps by searching for their name
+        as a string. Also means that you can't mix strings and modules in said hash maps
+        without getting very confusing bugs. But, you know, why would you ever want to do
+        that anyway, right?
+        """
         return self.name.__hash__()
 
-    def __repr__(self):
+    def __str__(self):
         imports = {
-            k.name: v if v else "∅"
+            k.name: v
             for k, v in sorted(
                 self.imports.items(), key=lambda x: x[0].name, reverse=True
             )
         }
-        return f"Module('{self.name}') -> {imports}"
+        return f"'{self.name}' -> {imports}"
+
+    @classmethod
+    def reset(cls):
+        cls._modules = []
+        cls._sorted = False
 
     @classmethod
     def modules(cls) -> Iterable[Module]:
@@ -107,10 +119,11 @@ class Module:
             imports.
 
         Notes:
-            This method can only be called once all Nodes have been initialised.
+            This method wil only produce accurate results once all Nodes have been
+            initialised.
         """
         nodes: dict[str, Module] = {node.name: node for node in cls.modules()}
-        for node in cls.modules():
+        for node in [*cls.modules()]:  # node.add() may shuffle cls.modules
             package = node.name.rsplit(".", 1)[0]  # only direct parent, not grandparents
             if package in nodes and package != node.name:
                 node.add(nodes[package], "parent")
@@ -149,7 +162,7 @@ class Module:
         aggregated on the same entry.
 
         Once this method was executed, the [`Module.modules`][byecycle.graph.Module.modules]
-        class-method can called to produce all created modules.
+        class-method can be called to produce all created modules.
 
         Note:
             Since `populate` takes place at the class-level, calling this funtion multiple
@@ -160,7 +173,7 @@ class Module:
                 The `.name` attribute of this parameter is assumed to be the name of the
                 package in order to identify which imports are local imports.
         """
-        cls._modules = []
+        cls.reset()
         node_data: dict[Module, list[tuple[str, ImportKind]]] = {}
         package_name = source_path.name
 
@@ -223,30 +236,27 @@ class ImportVisitor(ast.NodeVisitor):
         parent: ast.AST = node._parent  # type: ignore[union-attr]
         match parent:
             case ast.If(
-                _parent=ast.Module,  # type: ignore[misc]
+                _parent=ast.Module(),  # type: ignore[misc]
                 test=(ast.Name(id="TYPE_CHECKING") | ast.Attribute(attr="TYPE_CHECKING")),
             ):
                 # guarded by `if typing.TYPE_CHECKING:`
                 return "typing"
-            case ast.If(_parent=ast.Module):  # type: ignore[misc]
+            case ast.If(_parent=ast.Module()):  # type: ignore[misc]
                 # probably guarded by `if sys.version >= (x, y, z):`, but doesn't actually
                 # matter -- anything but TYPE_CHECKING is env-dependent during runtime or
                 # too obtuse to consider (I'm not writing code that checks for `if True:`)
                 return "conditional"
-            case ast.AST(_parent=current):  # type: ignore[misc]
+            case _:
                 while True:
                     # test if the import happens somewhere in a function
-                    if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         return "dynamic"
                     try:
-                        current = current._parent
+                        parent = parent._parent  # type: ignore[attr-defined]
                     except AttributeError:
                         # any nodes that reach this point are treated as regular toplevel
                         # imports, like imports that happen in a class body
                         return "vanilla"
-            case _:
-                # shouldn't happen, but just in case
-                return "vanilla"
 
     def visit_Import(self, node: ast.Import):
         kind = self.find_import_kind(node)
