@@ -68,40 +68,7 @@ The result will be a json string:
       "cycle": null
     }
   },
-  "byecycle.draw": {
-    "byecycle": {
-      "tags": [
-        "parent"
-      ],
-      "cycle": null
-    }
-  },
-  "byecycle.cli": {
-    "byecycle": {
-      "tags": [
-        "parent"
-      ],
-      "cycle": null
-    },
-    "byecycle.misc": {
-      "tags": [
-        "vanilla"
-      ],
-      "cycle": null
-    },
-    "byecycle.graph": {
-      "tags": [
-        "vanilla"
-      ],
-      "cycle": null
-    },
-    "byecycle.draw": {
-      "tags": [
-        "vanilla"
-      ],
-      "cycle": null
-    }
-  },
+  [...]
   "byecycle": {
     "byecycle.graph": {
       "tags": [
@@ -191,8 +158,8 @@ cycle/`EdgeKind`s.
 
 In short, if there is a cycle, the tags of all involved imports inform
 the cycle-severity, with the highest severity winning out if multiple apply. The defaults
-can be overriden in order to isolate, filter, or highlight cycles with specific
-tags/severities.
+can be overriden in order to isolate, filter, or highlight cycles with specific 
+severities.
 
 ### To Visualize the Import Graph
 

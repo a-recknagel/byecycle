@@ -96,5 +96,5 @@ jobs:
           name: distribution
           path: dist/
       - name: publish package
-        if: contains(github.ref, '/tags/')  # until I found a good way to automate
+        continue-on-error: true
         run: pdm publish --no-build -u __token__ -P ${{ secrets.PYPI_TOKEN }}
