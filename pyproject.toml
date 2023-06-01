@@ -48,6 +48,9 @@ test = [
     "pytest>=7.3.1",
     "pytest-cov>=4.1.0",
     "mypy>=1.3.0",
+    "click>=8.1.3",
+    "pip>=23.1.2",
+    "pytest-mock>=3.10.0",
 ]
 security = [
     "safety>=2.3.4",
@@ -70,6 +73,7 @@ source = ["byecycle"]
 source = ["src"]
 
 [tool.coverage.report]
+fail_under = 80
 show_missing = true
 
 [tool.black]
