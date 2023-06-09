@@ -31,13 +31,15 @@ theme:
 
 nav:
   - Home: 'index.md'
+  - Advanced: 'advanced.md'
   - Code Reference:
-    - Public API: 'autodocs/byecycle.md'
+    - Public Interface: 'autodocs/byecycle.md'
     - Graph Generation: 'autodocs/graph.md'
-    - Types and Stuff: 'autodocs/misc.md'
-    - Drawings: 'autodocs/draw.md'
+    - Types and Helpers: 'autodocs/misc.md'
+    - Visualisation: 'autodocs/draw.md'
   - Community:
-      - Code of Conduct: 'coc.md'
+    - Contributing: 'contributing.md'
+    - Code of Conduct: 'coc.md'
 
 watch:
   - src

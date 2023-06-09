@@ -2,6 +2,8 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 
 def test_version(cli):
     result = cli("--version")
@@ -9,105 +11,311 @@ def test_version(cli):
     assert "version: " in result.output
 
 
-def test_package_no_imports(cli, pip):
-    pip(
-        {
-            "foo": {
-                "__init__": "",
-                "bar": "",
-                "baz": {
+@pytest.mark.parametrize(
+    "install", [pytest.param(True, id="package"), pytest.param(False, id="source tree")]
+)
+class TestMainEntrypoint:
+    def test_no_imports(self, cli, pip, install):
+        source = pip(
+            {
+                "foo": {
                     "__init__": "",
-                    "qux": "",
-                    "quux": "",
-                },
-            }
+                    "bar": "",
+                    "baz": {
+                        "__init__": "",
+                        "qux": "",
+                        "quux": "",
+                    },
+                }
+            },
+            install=install,
+        )
+
+        result = cli("foo" if install else source)
+
+        assert result.exit_code == 0
+        assert result.json == {
+            "foo": {},
+            "foo.bar": {"foo": {"cycle": None, "tags": ["parent"]}},
+            "foo.baz": {"foo": {"cycle": None, "tags": ["parent"]}},
+            "foo.baz.qux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
+            "foo.baz.quux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
         }
-    )
 
-    result = cli("foo")
+    def test_imports(self, cli, pip, install):
+        source = pip(
+            {
+                "foo": {
+                    "__init__": "import foo.bar",
+                    "bar": "import foo.baz.qux",
+                    "baz": {
+                        "__init__": "",
+                        "qux": "import foo.baz.quux",
+                        "quux": "x = 1",
+                    },
+                }
+            },
+            install=install,
+        )
 
-    assert result.exit_code == 0
-    assert result.json == {
-        "foo": {},
-        "foo.bar": {"foo": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz": {"foo": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz.qux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz.quux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
-    }
+        result = cli("foo" if install else source)
 
+        assert result.exit_code == 0
+        assert result.json == {
+            "foo": {"foo.bar": {"cycle": "complicated", "tags": ["vanilla"]}},
+            "foo.bar": {
+                "foo": {"cycle": "complicated", "tags": ["parent"]},
+                "foo.baz.qux": {"cycle": None, "tags": ["vanilla"]},
+            },
+            "foo.baz": {"foo": {"cycle": None, "tags": ["parent"]}},
+            "foo.baz.qux": {
+                "foo.baz": {"cycle": None, "tags": ["parent"]},
+                "foo.baz.quux": {"cycle": None, "tags": ["vanilla"]},
+            },
+            "foo.baz.quux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
+        }
 
-def test_package_with_imports(cli, pip):
-    pip(
-        {
-            "foo": {
-                "__init__": "from foo import bar",
-                "bar": "from foo.baz import qux",
-                "baz": {
+    def test_imports_from(self, cli, pip, install):
+        source = pip(
+            {
+                "foo": {
+                    "__init__": "from foo import bar",
+                    "bar": "from foo.baz import qux",
+                    "baz": {
+                        "__init__": "",
+                        "qux": "from foo.baz.quux import x",
+                        "quux": "x = 1",
+                    },
+                }
+            },
+            install=install,
+        )
+
+        result = cli("foo" if install else source)
+
+        assert result.exit_code == 0
+        assert result.json == {
+            "foo": {"foo.bar": {"cycle": "complicated", "tags": ["vanilla"]}},
+            "foo.bar": {
+                "foo": {"cycle": "complicated", "tags": ["parent"]},
+                "foo.baz.qux": {"cycle": None, "tags": ["vanilla"]},
+            },
+            "foo.baz": {"foo": {"cycle": None, "tags": ["parent"]}},
+            "foo.baz.qux": {
+                "foo.baz": {"cycle": None, "tags": ["parent"]},
+                "foo.baz.quux": {"cycle": None, "tags": ["vanilla"]},
+            },
+            "foo.baz.quux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
+        }
+
+    def test_relative_imports_from(self, cli, pip, install):
+        source = pip(
+            {
+                "foo": {
+                    "__init__": "from . import bar",
+                    "bar": "from .baz import qux",
+                    "baz": {
+                        "__init__": "",
+                        "qux": "from .quux import x",
+                        "quux": "x = 1",
+                        "quuux": "from ..baz.quux import x",
+                    },
+                }
+            },
+            install=install,
+        )
+
+        result = cli("foo" if install else source)
+
+        assert result.exit_code == 0
+        assert result.json == {
+            "foo": {"foo.bar": {"cycle": "complicated", "tags": ["vanilla"]}},
+            "foo.bar": {
+                "foo": {"cycle": "complicated", "tags": ["parent"]},
+                "foo.baz.qux": {"cycle": None, "tags": ["vanilla"]},
+            },
+            "foo.baz": {"foo": {"cycle": None, "tags": ["parent"]}},
+            "foo.baz.qux": {
+                "foo.baz": {"cycle": None, "tags": ["parent"]},
+                "foo.baz.quux": {"cycle": None, "tags": ["vanilla"]},
+            },
+            "foo.baz.quux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
+            "foo.baz.quuux": {
+                "foo.baz": {"cycle": None, "tags": ["parent"]},
+                "foo.baz.quux": {"cycle": None, "tags": ["vanilla"]},
+            },
+        }
+
+    def test_vanilla_cycle(self, cli, pip, install):
+        source = pip(
+            {
+                "foo": {
                     "__init__": "",
-                    "qux": "from foo.baz.quux import x",
-                    "quux": "x = 1",
+                    "bar": "import foo.baz",
+                    "baz": "import foo.bar",
                 },
-            }
+            },
+            install=install,
+        )
+
+        result = cli("foo" if install else source)
+
+        assert result.exit_code == 0
+        assert result.json == {
+            "foo": {},
+            "foo.bar": {
+                "foo": {"cycle": None, "tags": ["parent"]},
+                "foo.baz": {"cycle": "bad", "tags": ["vanilla"]},
+            },
+            "foo.baz": {
+                "foo": {"cycle": None, "tags": ["parent"]},
+                "foo.bar": {"cycle": "bad", "tags": ["vanilla"]},
+            },
         }
-    )
 
-    result = cli("foo")
-
-    assert result.exit_code == 0
-    assert result.json == {
-        "foo": {"foo.bar": {"cycle": "complicated", "tags": ["vanilla"]}},
-        "foo.bar": {
-            "foo": {"cycle": "complicated", "tags": ["parent"]},
-            "foo.baz.qux": {"cycle": None, "tags": ["vanilla"]},
-        },
-        "foo.baz": {"foo": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz.qux": {
-            "foo.baz": {"cycle": None, "tags": ["parent"]},
-            "foo.baz.quux": {"cycle": None, "tags": ["vanilla"]},
-        },
-        "foo.baz.quux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
-    }
-
-
-def test_package_with_relative_imports(cli, pip):
-    pip(
-        {
-            "foo": {
-                "__init__": "from . import bar",
-                "bar": "from .baz import qux",
-                "baz": {
+    def test_typing_cycle(self, cli, pip, install):
+        source = pip(
+            {
+                "foo": {
                     "__init__": "",
-                    "qux": "from .quux import x",
-                    "quux": "x = 1",
-                    "quuux": "from ..foo.quux import x",
+                    "bar": (
+                        "import typing\n" "if typing.TYPE_CHECKING:\n" "   import foo.baz"
+                    ),
+                    "baz": "import foo.bar",
                 },
-            }
+            },
+            install=install,
+        )
+
+        result = cli("foo" if install else source)
+
+        assert result.exit_code == 0
+        assert result.json == {
+            "foo": {},
+            "foo.bar": {
+                "foo": {"cycle": None, "tags": ["parent"]},
+                "foo.baz": {"cycle": "skip", "tags": ["typing"]},
+            },
+            "foo.baz": {
+                "foo": {"cycle": None, "tags": ["parent"]},
+                "foo.bar": {"cycle": "skip", "tags": ["vanilla"]},
+            },
         }
-    )
 
-    result = cli("foo")
+    def test_conditional_cycle(self, cli, pip, install):
+        source = pip(
+            {
+                "foo": {
+                    "__init__": "",
+                    "bar": (
+                        "import sys\n"
+                        "if sys.version >= (3, 10, 0):\n"
+                        "   import foo.baz"
+                    ),
+                    "baz": "import foo.bar",
+                },
+            },
+            install=install,
+        )
 
-    assert result.exit_code == 0
-    assert result.json == {
-        "foo": {"foo.bar": {"cycle": "complicated", "tags": ["vanilla"]}},
-        "foo.bar": {
-            "foo": {"cycle": "complicated", "tags": ["parent"]},
-            "foo.baz.qux": {"cycle": None, "tags": ["vanilla"]},
-        },
-        "foo.baz": {"foo": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz.qux": {
-            "foo.baz": {"cycle": None, "tags": ["parent"]},
-            "foo.baz.quux": {"cycle": None, "tags": ["vanilla"]},
-        },
-        "foo.baz.quux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz.quuux": {
-            "foo": {"cycle": None, "tags": ["vanilla"]},
-            "foo.baz": {"cycle": None, "tags": ["parent"]},
-        },
-    }
+        result = cli("foo" if install else source)
+
+        assert result.exit_code == 0
+        assert result.json == {
+            "foo": {},
+            "foo.bar": {
+                "foo": {"cycle": None, "tags": ["parent"]},
+                "foo.baz": {"cycle": "complicated", "tags": ["conditional"]},
+            },
+            "foo.baz": {
+                "foo": {"cycle": None, "tags": ["parent"]},
+                "foo.bar": {"cycle": "complicated", "tags": ["vanilla"]},
+            },
+        }
+
+    def test_dynamic_cycle(self, cli, pip, install):
+        source = pip(
+            {
+                "foo": {
+                    "__init__": "",
+                    "bar": ("def qux():\n" "   import foo.baz"),
+                    "baz": "import foo.bar",
+                },
+            },
+            install=install,
+        )
+
+        result = cli("foo" if install else source)
+
+        assert result.exit_code == 0
+        assert result.json == {
+            "foo": {},
+            "foo.bar": {
+                "foo": {"cycle": None, "tags": ["parent"]},
+                "foo.baz": {"cycle": "complicated", "tags": ["dynamic"]},
+            },
+            "foo.baz": {
+                "foo": {"cycle": None, "tags": ["parent"]},
+                "foo.bar": {"cycle": "complicated", "tags": ["vanilla"]},
+            },
+        }
+
+    def test_class_scope_is_toplevel_cycle(self, cli, pip, install):
+        source = pip(
+            {
+                "foo": {
+                    "__init__": "",
+                    "bar": ("class Qux:\n" "   import foo.baz"),
+                    "baz": "import foo.bar",
+                },
+            },
+            install=install,
+        )
+
+        result = cli("foo" if install else source)
+
+        assert result.exit_code == 0
+        assert result.json == {
+            "foo": {},
+            "foo.bar": {
+                "foo": {"cycle": None, "tags": ["parent"]},
+                "foo.baz": {"cycle": "bad", "tags": ["vanilla"]},
+            },
+            "foo.baz": {
+                "foo": {"cycle": None, "tags": ["parent"]},
+                "foo.bar": {"cycle": "bad", "tags": ["vanilla"]},
+            },
+        }
+
+    def test_print_plain(self, cli, pip, install):
+        source = pip(
+            {
+                "foo": {
+                    "__init__": "",
+                    "bar": "",
+                    "baz": {
+                        "__init__": "",
+                        "qux": "",
+                        "quux": "",
+                    },
+                }
+            },
+            install=install,
+        )
+
+        result = cli("foo" if install else source, "--no-rich")
+
+        assert result.exit_code == 0
+        assert result.json == {
+            "foo": {},
+            "foo.bar": {"foo": {"cycle": None, "tags": ["parent"]}},
+            "foo.baz": {"foo": {"cycle": None, "tags": ["parent"]}},
+            "foo.baz.qux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
+            "foo.baz.quux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
+        }
 
 
-def test_source_tree_no_imports(cli, pip):
+def test_byecycle_as_subprocess_module(pip):
     source = pip(
         {
             "foo": {
@@ -121,281 +329,14 @@ def test_source_tree_no_imports(cli, pip):
             }
         },
         install=False,
-    )
-
-    result = cli(source)
-
-    assert result.exit_code == 0
-    assert result.json == {
-        "foo": {},
-        "foo.bar": {"foo": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz": {"foo": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz.qux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz.quux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
-    }
-
-
-def test_source_tree_with_imports(cli, pip):
-    source = pip(
-        {
-            "foo": {
-                "__init__": "from foo import bar",
-                "bar": "from foo.baz import qux",
-                "baz": {
-                    "__init__": "",
-                    "qux": "from foo.baz.quux import x",
-                    "quux": "x = 1",
-                },
-            }
-        },
-        install=False,
-    )
-
-    result = cli(source)
-
-    assert result.exit_code == 0
-    assert result.json == {
-        "foo": {"foo.bar": {"cycle": "complicated", "tags": ["vanilla"]}},
-        "foo.bar": {
-            "foo": {"cycle": "complicated", "tags": ["parent"]},
-            "foo.baz.qux": {"cycle": None, "tags": ["vanilla"]},
-        },
-        "foo.baz": {"foo": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz.qux": {
-            "foo.baz": {"cycle": None, "tags": ["parent"]},
-            "foo.baz.quux": {"cycle": None, "tags": ["vanilla"]},
-        },
-        "foo.baz.quux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
-    }
-
-
-def test_source_tree_with_relative_imports(cli, pip):
-    source = pip(
-        {
-            "foo": {
-                "__init__": "from . import bar",
-                "bar": "from .baz import qux",
-                "baz": {
-                    "__init__": "",
-                    "qux": "from .quux import x",
-                    "quux": "x = 1",
-                    "quuux": "from ..foo.quux import x",
-                },
-            }
-        },
-        install=False,
-    )
-
-    result = cli(source)
-
-    assert result.exit_code == 0
-    assert result.json == {
-        "foo": {"foo.bar": {"cycle": "complicated", "tags": ["vanilla"]}},
-        "foo.bar": {
-            "foo": {"cycle": "complicated", "tags": ["parent"]},
-            "foo.baz.qux": {"cycle": None, "tags": ["vanilla"]},
-        },
-        "foo.baz": {"foo": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz.qux": {
-            "foo.baz": {"cycle": None, "tags": ["parent"]},
-            "foo.baz.quux": {"cycle": None, "tags": ["vanilla"]},
-        },
-        "foo.baz.quux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz.quuux": {
-            "foo": {"cycle": None, "tags": ["vanilla"]},
-            "foo.baz": {"cycle": None, "tags": ["parent"]},
-        },
-    }
-
-
-def test_package_vanilla_cycle(cli, pip):
-    pip(
-        {
-            "foo": {
-                "__init__": "",
-                "bar": "import foo.baz",
-                "baz": "import foo.bar",
-            },
-        }
-    )
-
-    result = cli("foo")
-
-    assert result.exit_code == 0
-    assert result.json == {
-        "foo": {},
-        "foo.bar": {
-            "foo": {"cycle": None, "tags": ["parent"]},
-            "foo.baz": {"cycle": "bad", "tags": ["vanilla"]},
-        },
-        "foo.baz": {
-            "foo": {"cycle": None, "tags": ["parent"]},
-            "foo.bar": {"cycle": "bad", "tags": ["vanilla"]},
-        },
-    }
-
-
-def test_package_typing_cycle(cli, pip):
-    pip(
-        {
-            "foo": {
-                "__init__": "",
-                "bar": (
-                    "import typing\n" "if typing.TYPE_CHECKING:\n" "   import foo.baz"
-                ),
-                "baz": "import foo.bar",
-            },
-        }
-    )
-    result = cli("foo")
-
-    assert result.exit_code == 0
-    assert result.json == {
-        "foo": {},
-        "foo.bar": {
-            "foo": {"cycle": None, "tags": ["parent"]},
-            "foo.baz": {"cycle": "skip", "tags": ["typing"]},
-        },
-        "foo.baz": {
-            "foo": {"cycle": None, "tags": ["parent"]},
-            "foo.bar": {"cycle": "skip", "tags": ["vanilla"]},
-        },
-    }
-
-
-def test_package_conditional_cycle(cli, pip):
-    pip(
-        {
-            "foo": {
-                "__init__": "",
-                "bar": (
-                    "import sys\n" "if sys.version >= (3, 10, 0):\n" "   import foo.baz"
-                ),
-                "baz": "import foo.bar",
-            },
-        }
-    )
-    result = cli("foo")
-
-    assert result.exit_code == 0
-    assert result.json == {
-        "foo": {},
-        "foo.bar": {
-            "foo": {"cycle": None, "tags": ["parent"]},
-            "foo.baz": {"cycle": "complicated", "tags": ["conditional"]},
-        },
-        "foo.baz": {
-            "foo": {"cycle": None, "tags": ["parent"]},
-            "foo.bar": {"cycle": "complicated", "tags": ["vanilla"]},
-        },
-    }
-
-
-def test_package_dynamic_cycle(cli, pip):
-    pip(
-        {
-            "foo": {
-                "__init__": "",
-                "bar": ("def qux():\n" "   import foo.baz"),
-                "baz": "import foo.bar",
-            },
-        }
-    )
-    result = cli("foo")
-
-    assert result.exit_code == 0
-    assert result.json == {
-        "foo": {},
-        "foo.bar": {
-            "foo": {"cycle": None, "tags": ["parent"]},
-            "foo.baz": {"cycle": "complicated", "tags": ["dynamic"]},
-        },
-        "foo.baz": {
-            "foo": {"cycle": None, "tags": ["parent"]},
-            "foo.bar": {"cycle": "complicated", "tags": ["vanilla"]},
-        },
-    }
-
-
-def test_package_class_scope_is_toplevel_cycle(cli, pip):
-    pip(
-        {
-            "foo": {
-                "__init__": "",
-                "bar": ("class Qux:\n" "   import foo.baz"),
-                "baz": "import foo.bar",
-            },
-        }
-    )
-    result = cli("foo")
-
-    assert result.exit_code == 0
-    assert result.json == {
-        "foo": {},
-        "foo.bar": {
-            "foo": {"cycle": None, "tags": ["parent"]},
-            "foo.baz": {"cycle": "bad", "tags": ["vanilla"]},
-        },
-        "foo.baz": {
-            "foo": {"cycle": None, "tags": ["parent"]},
-            "foo.bar": {"cycle": "bad", "tags": ["vanilla"]},
-        },
-    }
-
-
-def test_package_does_not_exist(cli):
-    result = cli("foo")
-
-    assert result.exit_code == 1
-    assert "Failed trying to resolve project='foo'" in result.exception.args[0]
-
-
-def test_package_print_plain(cli, pip):
-    pip(
-        {
-            "foo": {
-                "__init__": "",
-                "bar": "",
-                "baz": {
-                    "__init__": "",
-                    "qux": "",
-                    "quux": "",
-                },
-            }
-        }
-    )
-
-    result = cli("foo", "--no-rich")
-
-    assert result.exit_code == 0
-    assert result.json == {
-        "foo": {},
-        "foo.bar": {"foo": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz": {"foo": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz.qux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
-        "foo.baz.quux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
-    }
-
-
-def test_source_tree_byecycle_as_subprocess_module(pip):
-    source = pip(
-        {
-            "foo": {
-                "__init__": "",
-                "bar": "",
-                "baz": {
-                    "__init__": "",
-                    "qux": "",
-                    "quux": "",
-                },
-            }
-        }
     )
 
     result = subprocess.run(
-        [sys.executable, "-m", "byecycle", source], capture_output=True
+        [sys.executable, "-m", "byecycle", source],
+        capture_output=True,
     )
 
+    assert result.returncode == 0
     assert json.loads(result.stdout) == {
         "foo": {},
         "foo.bar": {"foo": {"cycle": None, "tags": ["parent"]}},
@@ -403,3 +344,18 @@ def test_source_tree_byecycle_as_subprocess_module(pip):
         "foo.baz.qux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
         "foo.baz.quux": {"foo.baz": {"cycle": None, "tags": ["parent"]}},
     }
+
+
+def test_package_not_installed(cli):
+    result = cli("foo")
+
+    assert result.exit_code == 1
+    assert "Failed trying to resolve project" in result.exception.args[0]
+
+
+@pytest.mark.parametrize("path", ["/foo", "./foo", "/home/dev/foo"])
+def test_path_not_found(cli, path):
+    result = cli(path)
+
+    assert result.exit_code == 1
+    assert "Failed trying to resolve project" in result.exception.args[0]

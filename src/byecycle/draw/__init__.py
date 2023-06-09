@@ -1,13 +1,22 @@
+"""
+This code can be taken as a template for implementing a visualization of a module-import-
+graph. This attempt here using matplotlib is something of a bare minimum, lacking key
+features like the ability to zoom, editing, or any kind of rich inspection.
+
+But it should give an idea of how a `networkx.DiGraph` can be used, and what kind of
+metadata was put on its edges.
+"""
+
 from chextra import warn
 
 warn()
 
 from pathlib import Path
 
-import matplotlib.colors as clrs  # type: ignore
-import matplotlib.patches as ptc  # type: ignore
-import matplotlib.pyplot as plt  # type: ignore
-import networkx as nx  # type: ignore
+import matplotlib.colors as clrs  # type: ignore[import]
+import matplotlib.patches as ptc  # type: ignore[import]
+import matplotlib.pyplot as plt  # type: ignore[import]
+import networkx as nx  # type: ignore[import]
 
 DEFAULT_COLORS = {
     "no_cycle": "black",
