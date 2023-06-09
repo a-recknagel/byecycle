@@ -1,15 +1,34 @@
+"""
+All algorithms that are concerned with generating the import graph live in this module.
+On a high level, the following takes place:
+
+1. Given an absolute path to a directory, recursively collect all python files in it
+2. Compile the [AST](https://docs.python.org/3/library/ast.html#module-ast) of each file
+3. Collect all import statements from the ASTs, retain those that successfully match
+   against any of the parsed files (a _module_)
+4. From the context of the import-node within its AST, categorize each import statement
+5. Distribute the imports onto the modules they took place in, merge their categories if
+   there were multiple
+6. From these `module -> modules` mappings, generate a di-graph where the nodes are all
+   parsed modules, and the edges are the imports that take place between them
+7. A bidirectional edge implies an import cycle, and each edge retains the import
+   categories as metadata to help interpret the severity of the cycle
+"""
 from __future__ import annotations
 
 import ast
+import itertools
 from collections import defaultdict
+from operator import attrgetter
 from pathlib import Path
 from typing import Iterable, Self, Unpack
 
-import networkx as nx  # type: ignore
+import networkx as nx  # type: ignore[import]
 
 from byecycle.misc import (
     EdgeKind,
     ImportKind,
+    ImportStatement,
     SeverityMap,
     cycle_severity,
     path_to_module_name,
@@ -17,125 +36,121 @@ from byecycle.misc import (
 
 
 class Module:
-    """Represent a python module and the modules it imports."""
+    """Represent a python module and the modules it imports.
 
-    _modules: list[Module] = []
-    _sorted: bool = False
+    Every module has links to both its parent and children modules, as well as a
+    collection of modules that it imports in some way or another.
 
-    def __init__(self, name: str):
+    Parent-module imports are a bit of a special case, as their name doesn't actually
+    exist in the child module's namespace. But since any import like
+    `from foo.bar import baz` will, before `baz` is resolved, import `foo.bar` (which in
+    turn needs an import of `foo` before that), they are registered first thing anyway.
+
+    Treating their reliance chain as _imports_ models their relationship accurately for
+    the most part, but does create the impression of cycles if a parent imports names from
+    a child, which is a popular pattern for simplifying/exposing a public API. As a
+    consequence, these child-parent imports should be treated differently during
+    analysis.
+
+    See Also:
+        [discuss.python.org: Partial Modules](https://discuss.python.org/t/question-understanding-imports-a-bit-better-how-are-cycles-avoided/26647/2)
+        for a technical explanation of how parent and child modules interact during
+        imports.
+    """
+
+    def __init__(self, name: str, parent: Module | None):
         self.name: str = name
-        Module._modules.append(self)
+        self.parent: Module | None = parent
+        self.children: dict[str, Module] = {}
         self.imports: dict[Module, set[ImportKind]] = defaultdict(set)
+        if self.parent is not None:
+            self.imports[self.parent] = {"parent"}
+            self.parent.children[self.name] = self
 
-    def add(self, other: Module | str, tag: ImportKind):
-        """Add an import to this Module.
+    def __getitem__(self, item: str) -> Module:
+        return self.children[item]
 
-        This method can only be called once all Modules have been instantiated.
-
-        Args:
-            other: A modules, either as an object or as a string that will be evaluated as
-                its longest match from all valid module names. Valid strings are fully
-                qualified import arguments, i.e. `"foo.bar"` from `import foo.bar` or
-                `"foo.bar.baz"` from `from foo.bar import baz`. If `foo.bar` is a
-                registered module with name `baz` in it, both strings would add the module
-                `foo.bar` as an import.
-            tag: Describes the kind of import, e.g. import of module `foo` has the
-                tags `typing`, meaning it is the import of a parent module within an
-                `if typing.TYPE_CHECKING` block, which will be important information once
-                we want to visualize the severity of certain cyclic imports.
-
-        Raises:
-            RuntimeError: If bad arguments are passed.
-        """
-        if not Module._sorted:
-            # sort in descending alphabetical order, so that the longest match is found
-            # first
-            Module._modules.sort(key=lambda n: n.name, reverse=True)
-            Module._sorted = True
-
-        if isinstance(other, Module):
-            target = other
-        elif isinstance(other, str):
-            for node in Module.modules():
-                if other.startswith(node.name):
-                    target = node
-                    break
-            else:
-                # when calling this function, filter with `startswith(package)` to avoid
-                # this exception
-                raise RuntimeError(f"Tried to add non-local import {other=}.")
+    def __str__(self):
+        if self.children:
+            children = ", ".join(map(str, self.children.values()))
+            return f"{{{self.name} -> {children}}}"
         else:
-            # bad parameter type
-            raise RuntimeError(f"Tried to use invalid type {type(other)} as module.")
+            return self.name
 
-        self.imports[target].add(tag)
+    def __repr__(self):
+        return f"Module('{self.name}')"
 
     def __hash__(self):
         """Setting the hash of a module to be equal to its name's hash.
 
         That way, module objects can be found in hash maps by searching for their name
-        as a string. Also means that you can't mix strings and modules in said hash maps
-        without getting very confusing bugs. But, you know, why would you ever want to do
-        that anyway, right?
+        as a string. This also means that you can't mix strings and modules in said hash
+        maps without getting very confusing bugs. But, you know, why would you ever want
+        to do that anyway, right?
         """
         return self.name.__hash__()
 
-    def __str__(self):
-        imports = {
-            k.name: v
-            for k, v in sorted(
-                self.imports.items(), key=lambda x: x[0].name, reverse=True
-            )
-        }
-        return f"'{self.name}' -> {imports}"
+    def __eq__(self, other):
+        """Modules of the same name should always be equal to each other.
 
-    @classmethod
-    def reset(cls):
-        cls._modules = []
-        cls._sorted = False
-
-    @classmethod
-    def modules(cls) -> Iterable[Module]:
-        """Accessor for all registered modules."""
-        yield from cls._modules
-
-    @classmethod
-    def add_parent_imports(cls):
-        """Make modules with parent packages import them explicitly.
-
-        While the parent package's name doesn't automatically exist in a module's
-        namespace, any import like `from foo.bar import baz` will, before `baz` is
-        resolved, import `foo.bar` -- which in turn needs an import of `foo` before that.
-
-        Treating their reliance chain as _imports_ models this link accurately for the
-        most part, but does create the impression of cycles if a parent imports names from
-        a child, which is a popular pattern for simplifying/exposing a public API. As a
-        consequence, these child-parent imports should be treated differently during
-        analysis.
-
-        See Also:
-            [discuss.python.org: Partial Modules](https://discuss.python.org/t/question-understanding-imports-a-bit-better-how-are-cycles-avoided/26647/2)
-            for a technical explanation of how parent and child modules interact during
-            imports.
-
-        Notes:
-            This method wil only produce accurate results once all Nodes have been
-            initialised.
+        A module comparing equal with its name enables searching for them in hash maps by
+        their name.
         """
-        nodes: dict[str, Module] = {node.name: node for node in cls.modules()}
-        for node in [*cls.modules()]:  # node.add() may shuffle cls.modules
-            package = node.name.rsplit(".", 1)[0]  # only direct parent, not grandparents
-            if package in nodes and package != node.name:
-                node.add(nodes[package], "parent")
+        return self.name == other or self.name == other.name
+
+    def add_import(self, import_: ImportStatement, tag: ImportKind, root: Module):
+        """Register a local import statement and its tag to this Module.
+
+        Args:
+            import_: Equivalent to an import statement. If the name is set, it may or may
+                not refer to a module.
+            tag: Describes the kind of import, e.g. import of module `foo` has the
+                tags `typing`, meaning it is the import of a parent module within an
+                `if typing.TYPE_CHECKING` block, which will be important information once
+                we want to visualize the severity of certain cyclic imports.
+            root: The root module, which is used to find the other module. It must point
+                to the root module of the fully parsed source tree in order to produce
+                correct results.
+
+        !!! warning
+            Given that an import statement of the form `from foo.bar import baz` can't be
+            reasonably resolved in a static approach, a little guessing has to take place.
+            The current idea is to try and import the full normalized statement
+            `foo.bar.baz` as a module. If that fails (read, no python file was parsed
+            which corresponds to the module name), only the part between `from` and
+            `import`, i.e. `foo.bar` is attempted, assuming that `baz` is an attribute
+            within `foo.bar`.
+
+            As long as the import statements would not raise an `ImportError`, this
+            _should_ always produce correct results.
+        """
+        target: dict[str, Module] | Module = {root.name: root}  # seed
+        for sub_module in itertools.accumulate(
+            import_["module"].split("."), lambda a, b: f"{a}.{b}"
+        ):
+            target = target[sub_module]
+        if import_["name"] is not None:
+            try:
+                target = target[f"{import_['module']}.{import_['name']}"]
+            except KeyError:
+                pass  # "name" was not a module -- that's ok
+        self.imports[target].add(tag)  # type: ignore[index]
+
+    @staticmethod
+    def walk(module: Module) -> Iterable[Module]:
+        yield module
+        for recursion in map(Module.walk, module.children.values()):
+            yield from recursion
 
     @classmethod
-    def populate(cls, source_path: Path):
+    def parse(cls, source_path: Path) -> Module:
         """Walks down a source tree and registers each python file as a [`Module`][byecycle.graph.Module].
 
         After parsing all files recursively, all import statements in each file that
-        import a module that resolves to any of the files just recursed are listed
-        on their respective [`Module`][byecycle.graph.Module]. Additionally, some metadata from the context of the
-        import is retained. Specifically, the import-kind defintions are:
+        import a module that resolves to any of the files that we just parsed are listed
+        on their respective [`Module`][byecycle.graph.Module]. Additionally, some metadata
+        from the context of the import is retained. Specifically, the import-kind
+        definitions are:
 
         ___`vanilla`___
 
@@ -143,7 +158,7 @@ class Module:
 
         ___`typing`___
 
-        :   Only executed during static type analyis
+        :   Only executed during static type analysis
 
         ___`dynamic`___
 
@@ -161,33 +176,29 @@ class Module:
         If a module is imported multiple times in different ways, all their metadata is
         aggregated on the same entry.
 
-        Once this method was executed, the [`Module.modules`][byecycle.graph.Module.modules]
-        class-method can be called to produce all created modules.
-
-        Note:
-            Since `populate` takes place at the class-level, calling this funtion multiple
-            times will clear the data from a previous call.
-
         Args:
             source_path: Location of the source tree of the package that should be walked.
                 The `.name` attribute of this parameter is assumed to be the name of the
                 package in order to identify which imports are local imports.
+
+        Returns:
+            The top level, aka "root", module.
         """
-        cls.reset()
-        node_data: dict[Module, list[tuple[str, ImportKind]]] = {}
-        package_name = source_path.name
+        root_name = source_path.name
+        node_data: dict[Module, list[tuple[ImportStatement, ImportKind]]] = {}
+        module_map: dict[str, Module] = {}
 
         # walk the project, compile all python files, collect their import statements
-        for path in source_path.rglob("*"):
-            if not path.name.endswith(".py"):
-                continue
-            name = path_to_module_name(str(path), str(source_path), package_name)
-
+        # package modules need to be parsed first to make parent-child-linkage work
+        for path in sorted(
+            source_path.rglob("*.py"),
+            key=lambda x: x.parent if x.name == "__init__.py" else x,
+        ):
+            name = path_to_module_name(str(path), str(source_path), root_name)
             with open(path) as f:
                 ast_ = ast.parse(f.read())
 
-            # add a link to parent modules to make `Module.add_parent_imports` work
-            # and a link to their assumed module path to resolve imports
+            # add a link to the parent module and their qualname
             for node in ast.walk(ast_):
                 for child in ast.iter_child_nodes(node):
                     child._parent = node  # type: ignore[attr-defined]
@@ -198,26 +209,34 @@ class Module:
                     )
             visitor = ImportVisitor()
             visitor.visit(ast_)
-            node_data[cls(name)] = [
-                (m, t) for m, t in visitor.imports if m.startswith(package_name)
-            ]
-        cls.add_parent_imports()
 
-        # add all found imports to their respective module
+            parent = module_map.get(name.rsplit(".", 1)[0])
+            module = cls(name, parent)
+            module_map[name] = module
+            node_data[module] = [
+                (m, t) for m, t in visitor.imports if m["module"].startswith(root_name)
+            ]
+
+        # all source files parsed
+        root = module_map[root_name]
+
+        # link up import data with their respective module
         for module, imports in node_data.items():
             for import_, kind in imports:
-                module.add(import_, kind)
+                module.add_import(import_, kind, root)
+
+        return root
 
 
 class ImportVisitor(ast.NodeVisitor):
     """Collect import statements in a module and assign them an [`ImportKind`][byecycle.misc.ImportKind] category.
 
     Relies on a non-standard `_parent` field being present in each node which contains
-    a link to its parent node.
+    a link to its parent node, and `_module` to resolve relative imports.
     """
 
     def __init__(self):
-        self.imports: list[tuple[str, ImportKind]] = []
+        self.imports: list[tuple[ImportStatement, ImportKind]] = []
 
     @classmethod
     def find_import_kind(cls, node: ast.Import | ast.ImportFrom) -> ImportKind:
@@ -248,8 +267,8 @@ class ImportVisitor(ast.NodeVisitor):
                 return "conditional"
             case _:
                 while True:
-                    # test if the import happens somewhere in a function
                     if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        # the import happens somewhere in a function
                         return "dynamic"
                     try:
                         parent = parent._parent  # type: ignore[attr-defined]
@@ -261,7 +280,7 @@ class ImportVisitor(ast.NodeVisitor):
     def visit_Import(self, node: ast.Import):
         kind = self.find_import_kind(node)
         for alias in node.names:
-            self.imports.append((alias.name, kind))
+            self.imports.append(({"module": alias.name, "name": None}, kind))
 
     def visit_ImportFrom(self, node: ast.ImportFrom):
         kind = self.find_import_kind(node)
@@ -272,31 +291,31 @@ class ImportVisitor(ast.NodeVisitor):
                 path.append(node.module)
             module = ".".join(path)
         else:
-            assert node.module is not None  # iff None when node.level > 0 # nosec
-            module = node.module
+            # if node.level is 0, node.module can't be None
+            module = node.module  # type: ignore[assignment]
 
         for alias in node.names:
-            self.imports.append((f"{module}.{alias.name}", kind))
+            self.imports.append(({"module": module, "name": alias.name}, kind))
 
 
-def build_digraph(modules: list[Module], **kwargs: Unpack[SeverityMap]) -> nx.DiGraph:
-    """Turns a module-imports-mapping into a smart graph object.
+def build_digraph(root: Module, **kwargs: Unpack[SeverityMap]) -> nx.DiGraph:
+    """Turns module-import-mappings into a smart graph object.
 
     Args:
-        modules: [`Module`][byecycle.graph.Module] objects that know what other local
-            modules they import, and how.
+        root: Gets walked to produce all [`Module`][byecycle.graph.Module] objects that
+            know what other local modules they import, and how.
         **kwargs: Override the default settings for the severity of the "how" when imports
             in local modules might cause import cycles.
 
     Returns:
-        A graph object which allows the kind of operations that you'd want when working
-        with graph-like structures. Every edge in the graph has a `tags` and a `cycle`
-        entry (accessible with `getitem()`) holding metadata that can help interpret how
-        much of an issue a particular cyclic import might be.
+        A graph object which supports the kind of operations that you'd want when working
+            with graph-like structures. Every edge in the graph has a `tags` and a `cycle`
+            entry (accessible with `getitem()`) holding metadata that can help interpret
+            how much of an issue a particular cyclic import might be.
     """
     g = nx.DiGraph()
-    g.add_nodes_from([m.name for m in modules])
-    for module in modules:
+    g.add_nodes_from(map(attrgetter("name"), Module.walk(root)))
+    for module in Module.walk(root):
         for import_, tags in module.imports.items():
             g.add_edge(module.name, import_.name, tags=tags)
     for e_0, e_1 in g.edges():

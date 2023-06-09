@@ -27,7 +27,7 @@ pipx install byecycle
 ```
 ---
 
-### From Source / Dev Setup
+### Development Setup
 #### Requirements:
  - python 3.11 or higher
  - [pdm](https://pdm.fming.dev/)

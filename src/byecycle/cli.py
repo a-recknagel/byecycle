@@ -3,7 +3,7 @@ import json
 import os.path
 from pathlib import Path
 
-import networkx as nx  # type: ignore
+import networkx as nx  # type: ignore[import]
 import typer
 from rich import print, print_json
 
@@ -96,7 +96,10 @@ def _run(
     if os.path.isdir(project):
         project_path = Path(project)
     else:
-        spec = importlib.util.find_spec(project)
+        try:
+            spec = importlib.util.find_spec(project)
+        except ImportError:
+            spec = None
         if spec is None or spec.origin is None:
             raise RuntimeError(
                 f"Failed trying to resolve {project=} as a package, please pass the "
@@ -104,9 +107,9 @@ def _run(
             )
         project_path = Path(spec.origin).parent.resolve()
 
-    Module.populate(project_path)
+    root = Module.parse(project_path)
     graph = build_digraph(
-        [*Module.modules()],
+        root,
         dynamic=dynamic,
         conditional=conditional,
         typing=typing,

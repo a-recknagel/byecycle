@@ -40,8 +40,8 @@ def pip():
     But for testing purposes it's close enough.
     """
     old_modules = sys.modules.copy()
+    old_path = sys.path.copy()
     tmp_dir: tempfile.TemporaryDirectory | None = None
-    installed: Path | None = None
 
     def pseudo_installer(source: dict, *, install=True) -> str:
         def files_from_dict(path: Path, files: dict[str, str | dict]):
@@ -60,7 +60,6 @@ def pip():
                     )
 
         nonlocal tmp_dir
-        nonlocal installed
 
         # create source trees
         if len(source) != 1:
@@ -69,11 +68,8 @@ def pip():
         tmp_dir = tempfile.TemporaryDirectory(prefix=f"{name}_")
         files_from_dict(Path(tmp_dir.name), source)
 
-        # look ma, I'm a packager now!
         if install:
-            site_path = Path(site.getsitepackages()[-1])
-            dst = site_path / name
-            installed = shutil.copytree(Path(tmp_dir.name) / name, dst)
+            sys.path.append(tmp_dir.name)
 
         return str(Path(tmp_dir.name) / name)
 
@@ -84,13 +80,9 @@ def pip():
         if tmp_dir:
             tmp_dir.cleanup()
 
-        # cleanup of "installed" modules
-        if installed:
-            shutil.rmtree(installed)
-            # ... was that so hard, easy_install?
-
-    # restoring module cache
+    # restoring system
     sys.modules = old_modules
+    sys.path = old_path
 
 
 @pytest.fixture(scope="session", autouse=True)

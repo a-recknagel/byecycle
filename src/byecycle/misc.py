@@ -1,3 +1,7 @@
+"""
+Collection of shared structures, types, and functions.
+"""
+
 import enum
 from typing import (
     Annotated,
@@ -38,7 +42,7 @@ Metadata consists of a `tags`-list of [`ImportKind`][byecycle.misc.ImportKind]s 
 `cycle` which is either an [`EdgeKind`][byecycle.misc.EdgeKind] if there is a cycle, or
 `None` if there isn't.
 
-Example:
+??? example
     ```py
     {
         "foo": {
@@ -90,6 +94,16 @@ class SeverityMap(TypedDict, total=False):
     typing: EdgeKind
     parent: EdgeKind
     vanilla: EdgeKind
+
+
+class ImportStatement(TypedDict):
+    """Container for the information that we need from an AST import node.
+
+    The module-value is always non-empty, the name-value is only set by `ast.ImportFrom`.
+    """
+
+    module: str
+    name: str | None
 
 
 class _Edge(str, enum.Enum):
