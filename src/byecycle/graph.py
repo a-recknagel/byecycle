@@ -195,7 +195,7 @@ class Module:
             key=lambda x: x.parent if x.name == "__init__.py" else x,
         ):
             name = path_to_module_name(str(path), str(source_path), root_name)
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 ast_ = ast.parse(f.read())
 
             # add a link to the parent module and their qualname
