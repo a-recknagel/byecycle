@@ -3,7 +3,7 @@ import json
 import os.path
 from pathlib import Path
 
-import networkx as nx  # type: ignore[import]
+import networkx as nx  # type: ignore[import-untyped]
 import typer
 from rich import print, print_json
 
