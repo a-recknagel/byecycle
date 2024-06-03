@@ -13,10 +13,10 @@ warn()
 
 from pathlib import Path
 
-import matplotlib.colors as clrs  # type: ignore[import]
-import matplotlib.patches as ptc  # type: ignore[import]
-import matplotlib.pyplot as plt  # type: ignore[import]
-import networkx as nx  # type: ignore[import]
+import matplotlib.colors as clrs
+import matplotlib.patches as ptc
+import matplotlib.pyplot as plt
+import networkx as nx  # type: ignore[import-untyped]
 
 DEFAULT_COLORS = {
     "no_cycle": "black",
