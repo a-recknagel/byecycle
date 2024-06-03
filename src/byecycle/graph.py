@@ -14,6 +14,7 @@ On a high level, the following takes place:
 7. A bidirectional edge implies an import cycle, and each edge retains the import
    categories as metadata to help interpret the severity of the cycle
 """
+
 from __future__ import annotations
 
 import ast
@@ -23,7 +24,7 @@ from operator import attrgetter
 from pathlib import Path
 from typing import Iterable, Self, Unpack
 
-import networkx as nx  # type: ignore[import]
+import networkx as nx  # type: ignore[import-untyped]
 
 from byecycle.misc import (
     EdgeKind,
@@ -195,7 +196,7 @@ class Module:
             key=lambda x: x.parent if x.name == "__init__.py" else x,
         ):
             name = path_to_module_name(str(path), str(source_path), root_name)
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 ast_ = ast.parse(f.read())
 
             # add a link to the parent module and their qualname

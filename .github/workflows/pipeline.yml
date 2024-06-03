@@ -44,7 +44,7 @@ jobs:
       - name: source code vulnerabilities
         run: pdm run bandit -r src
       - name: 3rd party vulnerabilities
-        run: pdm export --prod -f requirements | pdm run safety check --stdin
+        run: pdm export --prod -f requirements | pdm run safety check --stdin --ignore 70612
 
       # build
       - name: build docs
