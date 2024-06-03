@@ -14,6 +14,7 @@ On a high level, the following takes place:
 7. A bidirectional edge implies an import cycle, and each edge retains the import
    categories as metadata to help interpret the severity of the cycle
 """
+
 from __future__ import annotations
 
 import ast
