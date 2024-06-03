@@ -16,6 +16,7 @@ imports, _, _ = run("byecycle")
 print(imports["byecycle"]["byecycle.cli"]["cycle"])  # prints: 'complicated'
 ```
 """
+
 from importlib import metadata
 
 __version__ = metadata.version("byecycle")
