@@ -24,7 +24,7 @@ from operator import attrgetter
 from pathlib import Path
 from typing import Iterable, Self, Unpack
 
-import networkx as nx  # type: ignore[import]
+import networkx as nx  # type: ignore[import-untyped]
 
 from byecycle.misc import (
     EdgeKind,
